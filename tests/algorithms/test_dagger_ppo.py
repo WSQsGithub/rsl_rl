@@ -106,6 +106,18 @@ class TestDaggerPPOLoss:
         for name, param in alg.teacher.named_parameters():
             assert torch.equal(param, teacher_before[name]), f"Teacher parameter {name} changed during update"
 
+    def test_entropy_scheduling_updates_entropy_coef(self) -> None:
+        alg, obs = _build_dagger_ppo(
+            entropy_coef=0.05,
+            entropy_scheduling={"mode": "step", "final_step": 0, "final_value": 0.0},
+        )
+        _fill_rollout_storage(alg, obs)
+
+        alg.update()
+
+        assert alg.entropy_coef == 0.0
+        assert alg.entropy_schedule_step == 0
+
 
 class TestDaggerPPOLoading:
     """Tests for teacher loading behavior."""

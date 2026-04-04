@@ -40,6 +40,7 @@ class DaggerPPO(PPO):
 		lam: float = 0.95,
 		value_loss_coef: float = 1.0,
 		entropy_coef: float = 0.01,
+		entropy_scheduling: dict | None = None,
 		learning_rate: float = 0.001,
 		max_grad_norm: float = 1.0,
 		optimizer: str = "adam",
@@ -69,6 +70,7 @@ class DaggerPPO(PPO):
 			lam=lam,
 			value_loss_coef=value_loss_coef,
 			entropy_coef=entropy_coef,
+			entropy_scheduling=entropy_scheduling,
 			learning_rate=learning_rate,
 			max_grad_norm=max_grad_norm,
 			optimizer=optimizer,
@@ -96,6 +98,8 @@ class DaggerPPO(PPO):
 
 	def update(self) -> dict[str, float]:
 		"""Run PPO updates with an additional teacher-imitation loss."""
+		self._update_entropy_coef()
+
 		mean_value_loss = 0.0
 		mean_surrogate_loss = 0.0
 		mean_entropy = 0.0

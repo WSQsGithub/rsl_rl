@@ -11,6 +11,7 @@ import torch.nn as nn
 import torch.optim as optim
 from itertools import chain
 from tensordict import TensorDict
+from typing import Any, Callable
 
 from rsl_rl.env import VecEnv
 from rsl_rl.extensions import RandomNetworkDistillation, resolve_rnd_config, resolve_symmetry_config
@@ -44,6 +45,7 @@ class PPO:
         lam: float = 0.95,
         value_loss_coef: float = 1.0,
         entropy_coef: float = 0.01,
+        entropy_scheduling: dict[str, Any] | None = None,
         learning_rate: float = 0.001,
         max_grad_norm: float = 1.0,
         optimizer: str = "adam",
@@ -126,7 +128,10 @@ class PPO:
         self.num_learning_epochs = num_learning_epochs
         self.num_mini_batches = num_mini_batches
         self.value_loss_coef = value_loss_coef
+        self.initial_entropy_coef = entropy_coef
         self.entropy_coef = entropy_coef
+        self.entropy_schedule_step = -1
+        self.entropy_scheduling = entropy_scheduling or {"mode": "constant"}
         self.gamma = gamma
         self.lam = lam
         self.max_grad_norm = max_grad_norm
@@ -135,6 +140,14 @@ class PPO:
         self.schedule = schedule
         self.learning_rate = learning_rate
         self.normalize_advantage_per_mini_batch = normalize_advantage_per_mini_batch
+
+        schedule_mode = self.entropy_scheduling.get("mode")
+        try:
+            self.entropy_scheduler: Callable[..., float] | None = getattr(self, f"_{schedule_mode}_entropy_schedule")
+        except AttributeError as err:
+            raise ValueError(
+                f"Unknown entropy schedule mode: {schedule_mode}. Supported modes are: constant, step, linear."
+            ) from err
 
     def act(self, obs: TensorDict) -> torch.Tensor:
         """Sample actions and store transition data."""
@@ -210,6 +223,8 @@ class PPO:
 
     def update(self) -> dict[str, float]:
         """Run optimization epochs over stored batches and return mean losses."""
+        self._update_entropy_coef()
+
         mean_value_loss = 0
         mean_surrogate_loss = 0
         mean_entropy = 0
@@ -415,6 +430,31 @@ class PPO:
 
         return loss_dict
 
+    def _update_entropy_coef(self) -> None:
+        """Refresh the entropy coefficient once per learning iteration."""
+        self.entropy_schedule_step += 1
+        self.entropy_coef = self.entropy_scheduler(step=self.entropy_schedule_step, **self.entropy_scheduling)
+
+    def _constant_entropy_schedule(self, step: int, **kwargs: dict[str, Any]) -> float:
+        """Keep the entropy regularization coefficient constant."""
+        return self.initial_entropy_coef
+
+    def _step_entropy_schedule(self, step: int, final_step: int, final_value: float, **kwargs: dict[str, Any]) -> float:
+        """Switch the entropy coefficient at a configured iteration."""
+        return self.initial_entropy_coef if step < final_step else final_value
+
+    def _linear_entropy_schedule(
+        self, step: int, initial_step: int, final_step: int, final_value: float, **kwargs: dict[str, Any]
+    ) -> float:
+        """Linearly interpolate the entropy coefficient over learning iterations."""
+        if step < initial_step:
+            return self.initial_entropy_coef
+        if step > final_step:
+            return final_value
+        return self.initial_entropy_coef + (final_value - self.initial_entropy_coef) * (step - initial_step) / (
+            final_step - initial_step
+        )
+
     def train_mode(self) -> None:
         """Set train mode for learnable models."""
         self.actor.train()
@@ -435,6 +475,8 @@ class PPO:
             "actor_state_dict": self.actor.state_dict(),
             "critic_state_dict": self.critic.state_dict(),
             "optimizer_state_dict": self.optimizer.state_dict(),
+            "entropy_coef": self.entropy_coef,
+            "entropy_schedule_step": self.entropy_schedule_step,
         }
         if self.rnd:
             saved_dict["rnd_state_dict"] = self.rnd.state_dict()
@@ -460,6 +502,8 @@ class PPO:
             self.critic.load_state_dict(loaded_dict["critic_state_dict"], strict=strict)
         if load_cfg.get("optimizer"):
             self.optimizer.load_state_dict(loaded_dict["optimizer_state_dict"])
+            self.entropy_coef = loaded_dict.get("entropy_coef", self.entropy_coef)
+            self.entropy_schedule_step = loaded_dict.get("entropy_schedule_step", self.entropy_schedule_step)
         if load_cfg.get("rnd") and self.rnd:
             self.rnd.load_state_dict(loaded_dict["rnd_state_dict"], strict=strict)
             self.rnd_optimizer.load_state_dict(loaded_dict["rnd_optimizer_state_dict"])

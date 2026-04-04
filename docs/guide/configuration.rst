@@ -175,6 +175,10 @@ PPO
      - float
      - ``0.01``
      - Entropy regularization coefficient.
+   * - ``entropy_scheduling``
+     - dict | None
+     - ``{"mode": "constant"}``
+     - Optional schedule for ``entropy_coef``. Valid modes: ``"constant"``, ``"step"``, ``"linear"``.
    * - ``gamma``
      - float
      - ``0.99``

@@ -17,6 +17,8 @@ train_cfg:
     lam: 0.95
     value_loss_coef: 1.0
     entropy_coef: 0.0
+    entropy_scheduling:
+      mode: constant
     learning_rate: 3.0e-4
     max_grad_norm: 1.0
     schedule: adaptive

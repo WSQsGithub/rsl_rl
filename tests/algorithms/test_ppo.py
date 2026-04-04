@@ -65,6 +65,24 @@ def _build_ppo(**overrides: object) -> tuple[PPO, TensorDict]:
     return ppo, obs
 
 
+def _fill_rollout_storage(ppo: PPO, obs: TensorDict) -> None:
+    """Populate rollout storage with deterministic test data for one PPO update."""
+    for _ in range(NUM_STEPS):
+        transition = RolloutStorage.Transition()
+        transition.observations = obs
+        transition.hidden_states = (None, None)
+        transition.actions = ppo.actor(obs, stochastic_output=True).detach()
+        transition.values = ppo.critic(obs).detach()
+        transition.actions_log_prob = ppo.actor.get_output_log_prob(transition.actions).detach()
+        transition.distribution_params = tuple(p.detach() for p in ppo.actor.output_distribution_params)
+        transition.rewards = torch.zeros(NUM_ENVS)
+        transition.dones = torch.zeros(NUM_ENVS)
+        ppo.storage.add_transition(transition)
+
+    ppo.storage.advantages.zero_()
+    ppo.storage.returns.copy_(ppo.storage.values)
+
+
 class TestGAEComputation:
     """Tests for generalized advantage estimation in ``compute_returns``."""
 
@@ -318,3 +336,32 @@ class TestAdaptiveLearningRate:
             ppo.learning_rate = min(1e-2, ppo.learning_rate * 1.5)
 
         assert ppo.learning_rate == initial_lr
+
+
+class TestEntropyScheduling:
+    """Tests for entropy coefficient scheduling across PPO updates."""
+
+    def test_step_entropy_schedule_applies_on_first_update(self) -> None:
+        """Step schedules should update the entropy coefficient before minibatch optimization starts."""
+        ppo, obs = _build_ppo(
+            entropy_coef=0.05,
+            entropy_scheduling={"mode": "step", "final_step": 0, "final_value": 0.0},
+        )
+        _fill_rollout_storage(ppo, obs)
+
+        ppo.update()
+
+        assert ppo.entropy_coef == 0.0
+        assert ppo.entropy_schedule_step == 0
+
+    def test_linear_entropy_schedule_progresses_with_updates(self) -> None:
+        """Linear schedules should interpolate the entropy coefficient over update iterations."""
+        ppo, obs = _build_ppo(
+            entropy_coef=0.06,
+            entropy_scheduling={"mode": "linear", "initial_step": 0, "final_step": 2, "final_value": 0.0},
+        )
+
+        for expected in (0.06, 0.03, 0.0):
+            _fill_rollout_storage(ppo, obs)
+            ppo.update()
+            assert abs(ppo.entropy_coef - expected) < 1e-6

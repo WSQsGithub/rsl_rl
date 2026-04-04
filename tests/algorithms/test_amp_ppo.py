@@ -137,3 +137,15 @@ class TestAMPPPO:
 
         load_iter = alg.load(ppo_only_checkpoint, load_cfg=None, strict=True)
         assert load_iter is True
+
+    def test_entropy_scheduling_updates_entropy_coef(self) -> None:
+        alg, obs = _build_amp_ppo(
+            entropy_coef=0.05,
+            entropy_scheduling={"mode": "step", "final_step": 0, "final_value": 0.0},
+        )
+        _fill_rollout_storage(alg, obs)
+
+        alg.update()
+
+        assert alg.entropy_coef == 0.0
+        assert alg.entropy_schedule_step == 0
