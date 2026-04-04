@@ -83,14 +83,17 @@ class TestOffPolicyRunner:
     """Runner construction and loop tests."""
 
     def test_runner_creates_algorithm(self) -> None:
+        """Runner construction should instantiate an SAC algorithm."""
         runner = _build_runner()
         assert runner.alg is not None
 
     def test_learn_runs_without_error(self) -> None:
+        """A short learning loop should complete without raising errors."""
         runner = _build_runner()
         runner.learn(num_learning_iterations=2)
 
     def test_learn_updates_parameters(self) -> None:
+        """Learning should update actor parameters once replay data is available."""
         runner = _build_runner()
         params_before = {n: p.clone() for n, p in runner.alg.actor.named_parameters()}
         runner.learn(num_learning_iterations=4)
@@ -98,6 +101,7 @@ class TestOffPolicyRunner:
         assert changed, "Actor parameters should have changed after learning"
 
     def test_save_and_load(self) -> None:
+        """Saving then loading should restore the actor state for the off-policy runner."""
         runner = _build_runner()
         runner.learn(num_learning_iterations=2)
         with tempfile.NamedTemporaryFile(suffix=".pt") as f:

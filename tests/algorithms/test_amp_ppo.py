@@ -7,10 +7,9 @@
 
 from __future__ import annotations
 
-from typing import Any
-
 import torch
 from tensordict import TensorDict
+from typing import Any
 
 from rsl_rl.algorithms.amp_ppo import AMPPPO
 from rsl_rl.models import MLPModel
@@ -93,6 +92,7 @@ class TestAMPPPO:
     """Tests for AMPPPO-specific behavior."""
 
     def test_process_env_step_adds_amp_reward(self) -> None:
+        """AMP rewards should be added to stored rollout rewards during environment processing."""
         alg, obs = _build_amp_ppo(amp_reward_coef=1.0)
 
         alg.act(obs)
@@ -104,6 +104,7 @@ class TestAMPPPO:
         assert torch.any(stored_rewards > 0.0)
 
     def test_update_reports_amp_metrics_and_updates_discriminator(self) -> None:
+        """AMP updates should report discriminator metrics and optimize discriminator weights."""
         alg, obs = _build_amp_ppo()
         _fill_rollout_storage(alg, obs)
 
@@ -117,6 +118,7 @@ class TestAMPPPO:
         assert changed, "Discriminator parameters should change after update"
 
     def test_save_load_roundtrip_keeps_discriminator_weights(self) -> None:
+        """Saving and loading should preserve discriminator parameters exactly."""
         alg, _obs = _build_amp_ppo()
 
         saved = alg.save()
@@ -127,6 +129,7 @@ class TestAMPPPO:
             assert torch.equal(value, clone.discriminator.state_dict()[key]), f"Mismatch for key: {key}"
 
     def test_load_from_ppo_checkpoint_skips_discriminator(self) -> None:
+        """Loading a PPO-only checkpoint should skip discriminator restoration without failing."""
         alg, _obs = _build_amp_ppo()
 
         ppo_only_checkpoint = {
@@ -139,6 +142,7 @@ class TestAMPPPO:
         assert load_iter is True
 
     def test_entropy_scheduling_updates_entropy_coef(self) -> None:
+        """Configured entropy schedules should update the AMP-PPO entropy coefficient on update."""
         alg, obs = _build_amp_ppo(
             entropy_coef=0.05,
             entropy_scheduling={"mode": "step", "final_step": 0, "final_value": 0.0},

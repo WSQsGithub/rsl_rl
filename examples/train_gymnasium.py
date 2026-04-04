@@ -1,15 +1,20 @@
+# Copyright (c) 2021-2026, ETH Zurich and NVIDIA CORPORATION
+# All rights reserved.
+#
+# SPDX-License-Identifier: BSD-3-Clause
+
 """Hydra-based unified Gymnasium training entrypoint for rsl_rl examples."""
 
 from __future__ import annotations
 
+import torch
 from copy import deepcopy
 from typing import Any, cast
 
 import hydra
-import torch
+from gymnasium_common import GymnasiumVecEnv, make_log_dir, set_seed
 from omegaconf import DictConfig, OmegaConf
 
-from gymnasium_common import GymnasiumVecEnv, make_log_dir, set_seed
 from rsl_rl.runners import DistillationRunner, OffPolicyRunner, OnPolicyRunner
 
 
@@ -78,6 +83,7 @@ def train_teacher_if_needed(cfg: DictConfig) -> str:
 
 
 def run_ppo(cfg: DictConfig) -> None:
+    """Train a PPO policy on the configured Gymnasium environment."""
     env = GymnasiumVecEnv(cfg.env.id, num_envs=cfg.env.num_envs, seed=cfg.seed, device=cfg.device)
     train_cfg = build_train_cfg(cfg)
     runner = OnPolicyRunner(
@@ -91,6 +97,7 @@ def run_ppo(cfg: DictConfig) -> None:
 
 
 def run_sac(cfg: DictConfig) -> None:
+    """Train an SAC policy on the configured Gymnasium environment."""
     env = GymnasiumVecEnv(cfg.env.id, num_envs=cfg.env.num_envs, seed=cfg.seed, device=cfg.device)
     train_cfg = build_train_cfg(cfg)
     runner = OffPolicyRunner(
@@ -104,6 +111,7 @@ def run_sac(cfg: DictConfig) -> None:
 
 
 def run_amp_ppo(cfg: DictConfig) -> None:
+    """Train AMP-PPO using either provided or bootstrapped expert observations."""
     env = GymnasiumVecEnv(cfg.env.id, num_envs=cfg.env.num_envs, seed=cfg.seed, device=cfg.device)
 
     expert_observations = None
@@ -129,6 +137,7 @@ def run_amp_ppo(cfg: DictConfig) -> None:
 
 
 def run_dagger_ppo(cfg: DictConfig) -> None:
+    """Train DAgger-PPO after resolving a teacher checkpoint."""
     teacher_checkpoint = train_teacher_if_needed(cfg)
 
     env = GymnasiumVecEnv(
@@ -151,6 +160,7 @@ def run_dagger_ppo(cfg: DictConfig) -> None:
 
 
 def run_distillation(cfg: DictConfig) -> None:
+    """Train the distillation runner from a teacher checkpoint."""
     teacher_checkpoint = train_teacher_if_needed(cfg)
 
     env = GymnasiumVecEnv(
@@ -174,6 +184,7 @@ def run_distillation(cfg: DictConfig) -> None:
 
 @hydra.main(version_base=None, config_path="configs", config_name="train_gymnasium")
 def main(cfg: DictConfig) -> None:
+    """Seed the process and dispatch to the selected Gymnasium training workflow."""
     set_seed(cfg.seed)
 
     algorithm_name = str(cfg.algorithm.name)

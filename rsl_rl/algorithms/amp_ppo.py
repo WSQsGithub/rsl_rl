@@ -7,12 +7,11 @@
 from __future__ import annotations
 
 import os
-from itertools import chain
-from typing import cast
-
 import torch
 import torch.nn as nn
+from itertools import chain
 from tensordict import TensorDict
+from typing import cast
 
 from rsl_rl.algorithms.ppo import PPO
 from rsl_rl.env import VecEnv
@@ -137,10 +136,7 @@ class AMPPPO(PPO):
             if isinstance(loaded, (torch.Tensor, TensorDict)):
                 resolved = loaded
             elif isinstance(loaded, dict):
-                if expert_observations_key in loaded:
-                    resolved = loaded[expert_observations_key]
-                else:
-                    resolved = loaded
+                resolved = loaded.get(expert_observations_key, loaded)
             else:
                 raise ValueError(
                     "Unsupported expert observations file format. Expected tensor, TensorDict, or dict payload."
@@ -329,7 +325,9 @@ class AMPPPO(PPO):
 
                 mean_actions = self.actor(batch.observations.detach().clone())
                 action_mean_orig = mean_actions[:original_batch_size]
-                _, actions_mean_symm = data_augmentation_func(obs=None, actions=action_mean_orig, env=self.symmetry["_env"])
+                _, actions_mean_symm = data_augmentation_func(
+                    obs=None, actions=action_mean_orig, env=self.symmetry["_env"]
+                )
 
                 mse_loss = torch.nn.MSELoss()
                 symmetry_loss = mse_loss(

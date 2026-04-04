@@ -308,6 +308,7 @@ class SquashedGaussianDistribution(Distribution):
         min_log_std: float = -20.0,
         max_log_std: float = 2.0,
     ) -> None:
+        """Initialize the squashed Gaussian distribution and its log-std constraints."""
         super().__init__(output_dim)
         self.std_type = std_type
         self.init_std = init_std
@@ -323,6 +324,7 @@ class SquashedGaussianDistribution(Distribution):
         Normal.set_default_validate_args(False)
 
     def update(self, mlp_output: torch.Tensor) -> None:
+        """Update the base Gaussian parameters from MLP output."""
         if self.std_type == "scalar":
             mean, std = torch.unbind(mlp_output, dim=-2)
             std = torch.clamp(std, min=1e-6)
@@ -338,54 +340,62 @@ class SquashedGaussianDistribution(Distribution):
         self._distribution = Normal(mean, std)
 
     def sample(self) -> torch.Tensor:
+        """Sample actions and squash them into the action bounds with tanh."""
         pre_tanh = self._distribution.sample()  # type: ignore
         return torch.tanh(pre_tanh)
 
     def deterministic_output(self, mlp_output: torch.Tensor) -> torch.Tensor:
+        """Return the tanh-squashed mean action for deterministic inference."""
         mean = mlp_output[..., 0, :]
         return torch.tanh(mean)
 
     def as_deterministic_output_module(self) -> nn.Module:
+        """Return an export-friendly module for deterministic actor outputs."""
         return _TanhMeanDeterministicOutput()
 
     @property
     def input_dim(self) -> list[int]:
+        """Return the expected MLP output shape for mean and standard deviation parameters."""
         return [2, self.output_dim]
 
     @property
     def mean(self) -> torch.Tensor:
+        """Return the current tanh-squashed mean action."""
         return torch.tanh(self._mean)  # type: ignore[arg-type]
 
     @property
     def std(self) -> torch.Tensor:
+        """Return the current unsquashed standard deviation."""
         return self._std  # type: ignore[return-value]
 
     @property
     def entropy(self) -> torch.Tensor:
+        """Return the entropy of the underlying Gaussian distribution."""
         return self._distribution.entropy().sum(dim=-1)  # type: ignore[union-attr]
 
     @property
     def params(self) -> tuple[torch.Tensor, ...]:
+        """Return the mean and log-standard-deviation parameters of the base Gaussian."""
         return (self._mean, self._log_std)  # type: ignore[return-value]
 
     def sample_with_log_prob(self, reparameterize: bool = True) -> tuple[torch.Tensor, torch.Tensor]:
-        if reparameterize:
-            pre_tanh = self._distribution.rsample()  # type: ignore[union-attr]
-        else:
-            pre_tanh = self._distribution.sample()  # type: ignore[union-attr]
+        """Sample squashed actions together with the tanh-corrected log probability."""
+        pre_tanh = self._distribution.rsample() if reparameterize else self._distribution.sample()  # type: ignore[union-attr]
         actions = torch.tanh(pre_tanh)
         log_prob = self._distribution.log_prob(pre_tanh)  # type: ignore[union-attr]
-        log_prob -= torch.log(1.0 - actions.pow(2) + 1e-6)
+        log_prob -= torch.log(torch.ones_like(actions) - actions.pow(2) + 1e-6)
         return actions, log_prob.sum(dim=-1, keepdim=True)
 
     def log_prob(self, outputs: torch.Tensor) -> torch.Tensor:
+        """Compute tanh-corrected log probabilities for squashed actions."""
         outputs = torch.clamp(outputs, -1.0 + 1e-6, 1.0 - 1e-6)
         pre_tanh = self._atanh(outputs)
         log_prob = self._distribution.log_prob(pre_tanh)  # type: ignore[union-attr]
-        log_prob -= torch.log(1.0 - outputs.pow(2) + 1e-6)
+        log_prob -= torch.log(torch.ones_like(outputs) - outputs.pow(2) + 1e-6)
         return log_prob.sum(dim=-1)
 
     def kl_divergence(self, old_params: tuple[torch.Tensor, ...], new_params: tuple[torch.Tensor, ...]) -> torch.Tensor:
+        """Compute KL divergence between two unsquashed Gaussian parameterizations."""
         old_mean, old_log_std = old_params
         new_mean, new_log_std = new_params
         old_std = torch.exp(old_log_std)
@@ -395,6 +405,7 @@ class SquashedGaussianDistribution(Distribution):
         return torch.distributions.kl_divergence(old_dist, new_dist).sum(dim=-1)
 
     def init_mlp_weights(self, mlp: nn.Module) -> None:
+        """Initialize the output layer weights for the mean and standard deviation heads."""
         torch.nn.init.zeros_(mlp[-2].weight[self.output_dim :])  # type: ignore
         if self.std_type == "scalar":
             torch.nn.init.constant_(mlp[-2].bias[self.output_dim :], self.init_std)  # type: ignore

@@ -1,17 +1,22 @@
+# Copyright (c) 2021-2026, ETH Zurich and NVIDIA CORPORATION
+# All rights reserved.
+#
+# SPDX-License-Identifier: BSD-3-Clause
+
 """Hydra-based Gymnasium evaluation entrypoint for rsl_rl examples."""
 
 from __future__ import annotations
 
+import torch
 from copy import deepcopy
 from datetime import datetime
 from pathlib import Path
 from typing import Any, cast
 
 import hydra
-import torch
+from gymnasium_common import GymnasiumVecEnv, set_seed
 from omegaconf import DictConfig, OmegaConf
 
-from gymnasium_common import GymnasiumVecEnv, set_seed
 from rsl_rl.runners import OffPolicyRunner, OnPolicyRunner
 
 
@@ -81,7 +86,6 @@ def resolve_render_output_paths(cfg: DictConfig, checkpoint_path: str) -> tuple[
 
     checkpoint = Path(checkpoint_path).expanduser()
     run_dir = checkpoint.parent
-    checkpoint_stem = checkpoint.stem
 
     rendering_root = run_dir / str(cfg.eval.rendering_subdir) / f"ckpt_{checkpoint_iter}"
     exported_root = run_dir / str(cfg.eval.exported_subdir) / f"ckpt_{checkpoint_iter}"
@@ -156,7 +160,9 @@ def evaluate(cfg: DictConfig) -> None:
         try:
             import imageio.v2 as imageio
         except ImportError as exc:
-            raise ImportError("imageio is required for eval.save_video=true. Install with `pip install imageio`.") from exc
+            raise ImportError(
+                "imageio is required for eval.save_video=true. Install with `pip install imageio`."
+            ) from exc
 
         video_writer = imageio.get_writer(str(video_path), fps=int(cfg.eval.video_fps))
         first_frame = env.render()
@@ -172,10 +178,7 @@ def evaluate(cfg: DictConfig) -> None:
     try:
         with torch.inference_mode():
             while len(finished_returns) < target_episodes:
-                if stochastic_actions:
-                    actions = policy(obs, stochastic_output=True)
-                else:
-                    actions = policy(obs)
+                actions = policy(obs, stochastic_output=True) if stochastic_actions else policy(obs)
 
                 obs, rewards, dones, _extras = env.step(actions.to(env.device))
                 obs = obs.to(cfg.device)
@@ -230,6 +233,7 @@ def evaluate(cfg: DictConfig) -> None:
 
 @hydra.main(version_base=None, config_path="configs", config_name="eval_gymnasium")
 def main(cfg: DictConfig) -> None:
+    """Seed the process and run Gymnasium policy evaluation."""
     set_seed(cfg.seed)
     evaluate(cfg)
 

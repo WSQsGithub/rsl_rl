@@ -1,16 +1,21 @@
+# Copyright (c) 2021-2026, ETH Zurich and NVIDIA CORPORATION
+# All rights reserved.
+#
+# SPDX-License-Identifier: BSD-3-Clause
+
 """Shared utilities for running rsl_rl on Gymnasium classic benchmarks."""
 
 from __future__ import annotations
 
 import argparse
+import numpy as np
 import os
+import torch
 from dataclasses import dataclass
+from tensordict import TensorDict
 from typing import Any
 
 import gymnasium as gym
-import numpy as np
-import torch
-from tensordict import TensorDict
 
 from rsl_rl.env import VecEnv
 
@@ -39,6 +44,7 @@ class GymnasiumVecEnv(VecEnv):
         device: str = "cpu",
         render_mode: str | None = None,
     ) -> None:
+        """Initialize vectorized Gymnasium environments and buffers."""
         self.env_id = env_id
         self.num_envs = num_envs
         self.device = device
@@ -71,9 +77,11 @@ class GymnasiumVecEnv(VecEnv):
             self._obs_buf[i] = self._flatten_obs(obs)
 
     def get_observations(self) -> TensorDict:
+        """Return the latest batched observations in TensorDict format."""
         return TensorDict({"policy": self._obs_buf.clone()}, batch_size=[self.num_envs], device=self.device)
 
     def step(self, actions: torch.Tensor) -> tuple[TensorDict, torch.Tensor, torch.Tensor, dict]:
+        """Step every sub-environment once and collect transition metadata."""
         actions_np = actions.detach().cpu().numpy().reshape(self.num_envs, self.num_actions)
 
         rewards = torch.zeros(self.num_envs, dtype=torch.float32, device=self.device)
@@ -117,6 +125,7 @@ class GymnasiumVecEnv(VecEnv):
         return self.get_observations(), rewards, dones, extras
 
     def close(self) -> None:
+        """Close all underlying Gymnasium environments."""
         for env in self.envs:
             env.close()
 

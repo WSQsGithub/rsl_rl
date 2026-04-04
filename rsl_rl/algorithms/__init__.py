@@ -6,9 +6,9 @@
 """Learning algorithms."""
 
 from .amp_ppo import AMPPPO
-from .distillation import Distillation
 from .dagger_ppo import DaggerPPO
+from .distillation import Distillation
 from .ppo import PPO
 from .sac import SAC
 
-__all__ = ["PPO", "SAC", "Distillation", "DaggerPPO", "AMPPPO"]
+__all__ = ["AMPPPO", "PPO", "SAC", "DaggerPPO", "Distillation"]

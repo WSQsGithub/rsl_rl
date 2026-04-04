@@ -91,6 +91,7 @@ class TestDaggerPPOLoss:
     """Tests for PPO updates with an auxiliary DAgger loss."""
 
     def test_update_reports_dagger_loss_and_keeps_teacher_frozen(self) -> None:
+        """DAgger updates should train the student while keeping the teacher parameters fixed."""
         alg, obs = _build_dagger_ppo()
         alg.train_mode()
         _fill_rollout_storage(alg, obs)
@@ -107,6 +108,7 @@ class TestDaggerPPOLoss:
             assert torch.equal(param, teacher_before[name]), f"Teacher parameter {name} changed during update"
 
     def test_entropy_scheduling_updates_entropy_coef(self) -> None:
+        """Configured entropy schedules should update the DAgger-PPO entropy coefficient on update."""
         alg, obs = _build_dagger_ppo(
             entropy_coef=0.05,
             entropy_scheduling={"mode": "step", "final_step": 0, "final_value": 0.0},
@@ -123,6 +125,7 @@ class TestDaggerPPOLoading:
     """Tests for teacher loading behavior."""
 
     def test_default_load_from_ppo_checkpoint_only_loads_teacher(self) -> None:
+        """Default loading from a PPO checkpoint should only hydrate the teacher weights."""
         alg, _obs = _build_dagger_ppo()
 
         teacher_before = {name: param.clone() for name, param in alg.teacher.named_parameters()}

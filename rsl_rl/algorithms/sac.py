@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import copy
 import torch
-import torch.nn.functional as F
+import torch.nn.functional as functional
 from tensordict import TensorDict
 
 from rsl_rl.env import VecEnv
@@ -48,6 +48,7 @@ class SAC:
         critic_2: MLPModel | None = None,
         **kwargs: dict,
     ) -> None:
+        """Initialize SAC with configurable actor, critic, and entropy tuning components."""
         del kwargs
 
         self.device = device
@@ -120,11 +121,13 @@ class SAC:
 
     @property
     def alpha(self) -> torch.Tensor:
+        """Return the current entropy temperature."""
         if self.auto_entropy_tuning:
             return self.log_alpha.exp()  # type: ignore
         return self._alpha
 
     def cat_obs(self, obs: TensorDict, groups: list[str]) -> torch.Tensor:
+        """Concatenate configured observation groups into a single tensor."""
         return torch.cat([obs[g] for g in groups], dim=-1)
 
     def _build_actor_mlp_output(self, actor_obs: torch.Tensor) -> torch.Tensor:
@@ -155,6 +158,7 @@ class SAC:
         return actions, log_prob
 
     def act(self, obs: TensorDict) -> torch.Tensor:
+        """Sample actions for the environment and cache transition inputs for replay."""
         actor_obs = self.cat_obs(obs, self.actor_obs_groups)
         critic_obs = self.cat_obs(obs, self.critic_obs_groups)
 
@@ -177,6 +181,7 @@ class SAC:
         dones: torch.Tensor,
         extras: dict[str, torch.Tensor],
     ) -> None:
+        """Store the latest transition in replay memory and update normalizers."""
         del extras
         if self._last_actor_obs is None or self._last_critic_obs is None or self._last_actions is None:
             raise RuntimeError("act() must be called before process_env_step().")
@@ -208,6 +213,7 @@ class SAC:
         )
 
     def update(self) -> dict[str, float]:
+        """Run one or more SAC gradient steps and return averaged training metrics."""
         if self.replay_buffer.size < max(self.batch_size, self.learning_starts):
             return {
                 "critic": 0.0,
@@ -234,7 +240,7 @@ class SAC:
 
             current_q1 = self._critic_forward(self.critic_1, critic_obs, actions)
             current_q2 = self._critic_forward(self.critic_2, critic_obs, actions)
-            critic_loss = F.mse_loss(current_q1, target_q) + F.mse_loss(current_q2, target_q)
+            critic_loss = functional.mse_loss(current_q1, target_q) + functional.mse_loss(current_q2, target_q)
 
             self.critic_optimizer.zero_grad()
             critic_loss.backward()
@@ -279,6 +285,7 @@ class SAC:
         return loss_dict
 
     def train_mode(self) -> None:
+        """Set all learnable networks to training mode."""
         self.actor.train()
         self.critic_1.train()
         self.critic_2.train()
@@ -286,6 +293,7 @@ class SAC:
         self.target_critic_2.train()
 
     def eval_mode(self) -> None:
+        """Set all learnable networks to evaluation mode."""
         self.actor.eval()
         self.critic_1.eval()
         self.critic_2.eval()
@@ -293,6 +301,7 @@ class SAC:
         self.target_critic_2.eval()
 
     def save(self) -> dict:
+        """Return a checkpoint payload for the actor, critics, optimizers, and replay cursor."""
         saved_dict = {
             "actor_state_dict": self.actor.state_dict(),
             "critic_1_state_dict": self.critic_1.state_dict(),
@@ -310,6 +319,7 @@ class SAC:
         return saved_dict
 
     def load(self, loaded_dict: dict, load_cfg: dict | None, strict: bool) -> bool:
+        """Load checkpointed SAC state according to the provided load configuration."""
         if load_cfg is None:
             load_cfg = {
                 "actor": True,
@@ -343,10 +353,12 @@ class SAC:
         return self.actor
 
     def get_action_std(self) -> torch.Tensor:
+        """Return the most recently observed action standard deviation."""
         return self._last_action_std
 
     @staticmethod
     def construct_algorithm(obs: TensorDict, env: VecEnv, cfg: dict, device: str) -> SAC:
+        """Construct SAC from environment observations and a runner configuration."""
         alg_class: type[SAC] = resolve_callable(cfg["algorithm"].pop("class_name"))  # type: ignore
 
         default_sets = ["actor", "critic"]

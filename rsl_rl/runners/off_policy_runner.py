@@ -23,6 +23,7 @@ class OffPolicyRunner:
     """The actor-critic off-policy algorithm."""
 
     def __init__(self, env: VecEnv, train_cfg: dict, log_dir: str | None = None, device: str = "cpu") -> None:
+        """Construct the off-policy runner, algorithm, and logging stack."""
         self.env = env
         self.cfg = train_cfg
         self.device = device
@@ -58,6 +59,7 @@ class OffPolicyRunner:
         self.current_learning_iteration = 0
 
     def learn(self, num_learning_iterations: int, init_at_random_ep_len: bool = False) -> None:
+        """Run the off-policy learning loop for the specified number of iterations."""
         if init_at_random_ep_len:
             self.env.episode_length_buf = torch.randint_like(
                 self.env.episode_length_buf,
@@ -113,6 +115,7 @@ class OffPolicyRunner:
             self.logger.stop_logging_writer()
 
     def save(self, path: str, infos: dict | None = None) -> None:
+        """Save training state and model parameters to disk."""
         saved_dict = self.alg.save()
         saved_dict["iter"] = self.current_learning_iteration
         saved_dict["infos"] = infos
@@ -126,6 +129,7 @@ class OffPolicyRunner:
         strict: bool = True,
         map_location: str | None = None,
     ) -> dict:
+        """Load model and runner state from a checkpoint file."""
         loaded_dict = torch.load(path, weights_only=False, map_location=map_location)
         load_iteration = self.alg.load(loaded_dict, load_cfg, strict)
         if load_iteration:
@@ -133,6 +137,7 @@ class OffPolicyRunner:
         return loaded_dict["infos"]
 
     def get_inference_policy(self, device: str | None = None) -> torch.nn.Module:
+        """Return the actor in evaluation mode for inference."""
         self.alg.eval_mode()
         return self.alg.get_policy().to(device)
 
@@ -159,4 +164,5 @@ class OffPolicyRunner:
         )
 
     def add_git_repo_to_log(self, repo_file_path: str) -> None:
+        """Register a repository path whose git state should be included in logs."""
         self.logger.git_status_repos.append(repo_file_path)

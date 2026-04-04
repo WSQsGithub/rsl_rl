@@ -20,6 +20,7 @@ class ReplayBuffer:
         action_dim: int,
         device: str,
     ) -> None:
+        """Allocate replay storage tensors for SAC transitions."""
         self.capacity = capacity
         self.device = device
         self.ptr = 0
@@ -43,6 +44,7 @@ class ReplayBuffer:
         next_actor_obs: torch.Tensor,
         next_critic_obs: torch.Tensor,
     ) -> None:
+        """Append one vectorized batch of transitions to the replay buffer."""
         batch_size = actor_obs.shape[0]
         for i in range(batch_size):
             idx = self.ptr
@@ -58,6 +60,7 @@ class ReplayBuffer:
             self.size = min(self.size + 1, self.capacity)
 
     def sample(self, batch_size: int) -> tuple[torch.Tensor, ...]:
+        """Sample a random mini-batch of transitions from replay memory."""
         idx = torch.randint(0, self.size, (batch_size,), device=self.device)
         return (
             self.actor_obs[idx],

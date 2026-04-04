@@ -56,6 +56,7 @@ class TestSACBasics:
     """Tests for construction and action sampling."""
 
     def test_act_returns_bounded_actions(self) -> None:
+        """SAC actions should remain inside the squashed action bounds."""
         alg, obs = _build_sac(learning_starts=0)
         actions = alg.act(obs)
         assert actions.shape == (NUM_ENVS, NUM_ACTIONS)
@@ -63,6 +64,7 @@ class TestSACBasics:
         assert torch.all(actions >= -1.0)
 
     def test_update_changes_parameters(self) -> None:
+        """A SAC update should modify actor parameters once the replay buffer is warm."""
         alg, _obs = _build_sac()
         _fill_buffer(alg, steps=32)
 
@@ -79,6 +81,7 @@ class TestSACCheckpointing:
     """Tests for save/load functionality."""
 
     def test_save_and_load_restores_actor(self) -> None:
+        """Loading a saved checkpoint should restore the actor parameters exactly."""
         alg, _obs = _build_sac()
         _fill_buffer(alg, steps=32)
         alg.update()
